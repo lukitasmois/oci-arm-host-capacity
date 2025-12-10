@@ -2,8 +2,8 @@ name: Run OCI Script
 
 on:
   schedule:
-    - cron: "*/2 * * * *"   # Cada 5 minutos
-  workflow_dispatch:        # Para ejecutarlo manualmente
+    - cron: "*/2 * * * *"   # Cada 2 minutos
+  workflow_dispatch:
 
 jobs:
   run:
@@ -11,21 +11,35 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Instalar PHP
-        run: sudo apt-get install -y php php-curl php-cli
+      - name: Install PHP
+        run: sudo apt-get update && sudo apt-get install -y php php-cli php-curl unzip
 
-      - name: Instalar dependencias (Composer)
-        run: composer install
+      - name: Install Composer
+        run: |
+          php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+          php composer-setup.php --install-dir=/usr/local/bin --filename=composer
 
-      - name: Ejecutar script
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Copy private key from secret
+        run: echo "${{ secrets.OCI_PRIVATE_KEY }}" > oci_key.pem
+
+      - name: Run script
         env:
           OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
           OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
           OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
-          OCI_PRIVATE_KEY_PATH: oci_key.pem
+          OCI_PRIVATE_KEY_PATH: "oci_key.pem"
           OCI_REGION: ${{ secrets.OCI_REGION }}
           OCI_COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
         run: php index.php
-
